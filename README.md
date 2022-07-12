@@ -4,7 +4,7 @@ Git 全局设置:
 
 ```bash
 git config --global user.name "!0"
-git config --global user.email "168618014@qq.com"
+git config --global user.email "zoushaofei@outlook.com"
 ```
 
 创建 git 仓库:
