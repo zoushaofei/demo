@@ -1,0 +1,138 @@
+/* 圣杯布局 */
+/* * {
+  margin: 0;
+  padding: 0;
+}
+
+.header,
+.footer {
+  height: 100px;
+  line-height: 100px;
+  background-color: green;
+  text-align: center;
+  font-size: 30px;
+  font-weight: bolder;
+}
+
+.footer {
+  background-color: goldenrod;
+}
+
+.container {
+  padding: 0 220px 0 200px;
+  overflow: hidden;
+}
+
+.left,
+.middle,
+.right {
+  position: relative;
+  float: left;
+  min-height: 130px;
+  word-break: break-all;
+}
+
+.left {
+  margin-left: -100%;
+  left: -200px;
+  width: 200px;
+  background-color: red;
+}
+
+.right {
+  margin-left: -220px;
+  right: -220px;
+  width: 220px;
+  background-color: pink;
+}
+
+.middle {
+  width: 100%;
+  background-color: blue;
+} */
+
+/* 双飞翼布局 */
+
+/* * {
+  margin: 0;
+  padding: 0;
+}
+
+.header,
+.footer {
+  height: 100px;
+  line-height: 100px;
+  background-color: green;
+  text-align: center;
+  font-size: 30px;
+  font-weight: bolder;
+}
+
+.footer {
+  background-color: goldenrod;
+}
+
+.container {
+  overflow: hidden;
+}
+
+.left,
+.middle,
+.right {
+  float: left;
+  min-height: 130px;
+  word-break: break-all;
+}
+
+.left {
+  margin-left: -100%;
+  width: 200px;
+  background-color: red;
+}
+
+.right {
+  margin-left: -220px;
+  width: 220px;
+  background-color: green;
+}
+
+.middle {
+  width: 100%;
+  height: 100%;
+  background-color: blue;
+}
+
+.inner {
+  margin: 0 220px 0 200px;
+  min-height: 130px;
+  background: blue;
+  word-break: break-all;
+} */
+
+.border {
+  border: 2px solid;
+}
+
+.common-div {
+  width: 160px;
+  height: 50px;
+  background-color: red;
+}
+
+.float-red {
+  width: 100px;
+  height: 50px;
+  background-color: #fcc;
+  float: left;
+}
+
+.float-blue {
+  width: 100px;
+  height: 50px;
+  background-color: #09c;
+  float: left;
+}
+
+li {
+  background-color: red;
+}
