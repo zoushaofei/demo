@@ -10,11 +10,13 @@ var createRender = function (options) {
     setElementText,
     createText,
     setText,
+    createComment,
+    setComment,
     insert,
     patchProps
   } = options
 
-  function render (vnode, container) {
+  function render(vnode, container) {
     if (vnode) {
       patch(container._vnode, vnode, container)
     } else {
@@ -25,7 +27,7 @@ var createRender = function (options) {
     container._vnode = vnode
   }
 
-  function patch (n1, n2, container) {
+  function patch(n1, n2, container) {
     if (n1 && n1.type !== n2.type) {
       unmount(n1)
       n1 = null
@@ -54,11 +56,19 @@ var createRender = function (options) {
         patchChildren(n1, n2, container)
       }
     } else if (typeof type === TYPE_ENUM.COMMENT) {
-
+      if (!n1) {
+        const el = n2.el = createComment(n2, n2.children)
+        insert(el, container)
+      } else {
+        const el = n2.el = n1.el
+        if (n2.children !== n1.children) {
+          setComment(el, n2.children)
+        }
+      }
     }
   }
 
-  function patchElement (n1, n2) {
+  function patchElement(n1, n2) {
     const el = n2.el = n1.el
     const oldProps = n1.props
     const newProps = n2.props
@@ -88,7 +98,7 @@ var createRender = function (options) {
     patchChildren(n1, n2, el)
   }
 
-  function patchChildren (n1, n2, container) {
+  function patchChildren(n1, n2, container) {
     if (typeof n2.children === 'string') {
       if (Array.isArray(n1.children)) {
         n1.children.forEach(c => unmount(c))
@@ -110,7 +120,7 @@ var createRender = function (options) {
     }
   }
 
-  function mountElement (vnode, container) {
+  function mountElement(vnode, container) {
     const el = vnode.el = createElement(vnode.type)
 
     if (typeof vnode.children === 'string') {
@@ -130,7 +140,7 @@ var createRender = function (options) {
     insert(el, container)
   }
 
-  function unmount (vnode) {
+  function unmount(vnode) {
     if (vnode.type === TYPE_ENUM.FRAGMENT) {
       vnode.children.forEach(c => unmount(c))
       return
@@ -205,22 +215,28 @@ const newNode = {
 }
 
 const renderer = createRender({
-  createElement (tag) {
+  createElement(tag) {
     return document.createElement(tag)
   },
-  setElementText (el, text) {
+  setElementText(el, text) {
     el.textContent = text
   },
-  insert (el, parent, anchor = null) {
+  insert(el, parent, anchor = null) {
     parent.insertBefore(el, anchor)
   },
-  createText (text) {
+  createText(text) {
     return document.createTextNode(text);
   },
-  setText (el, text) {
+  setText(el, text) {
     el.setText(text)
   },
-  patchProps (el, key, prevValue, nextValue) {
+  createComment(text) {
+    return document.createComment(text);
+  },
+  setComment(el, text) {
+    console.log(el);
+  },
+  patchProps(el, key, prevValue, nextValue) {
     if (/^on/.test(key)) {
       const invokers = el._vei || (el._vei = {})
       let invoker = invokers[key]
