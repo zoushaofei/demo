@@ -10,20 +10,19 @@ git config --global user.email "168618014@qq.com"
 创建 git 仓库:
 
 ```bash
-mkdir test
-cd test
+echo "# demo" >> README.md
 git init
-touch README.md
 git add README.md
 git commit -m "first commit"
+git branch -M main
 git remote add origin https://github.com/zoushaofei/demo.git
-git push -u origin "master"
+git push -u origin main
 ```
 
 已有仓库?
 
 ```bash
-cd existing_git_repo
 git remote add origin https://github.com/zoushaofei/demo.git
-git push -u origin "master"
+git branch -M main
+git push -u origin main
 ```
