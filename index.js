@@ -8,4 +8,4 @@ var loadScript = function (src, callback) {
   document.body.appendChild(script)
 }
 
-// loadScript('./DesignModel/状态模式.js')
+loadScript('./vue/index.js')
