@@ -2,7 +2,7 @@ const TYPE_ENUM = {
   TEXT: Symbol('text'),
   COMMENT: Symbol('comment'),
   FRAGMENT: Symbol('fragment'),
-}
+};
 
 var createRender = function (options) {
   const {
@@ -14,272 +14,294 @@ var createRender = function (options) {
     setComment,
     insert,
     patchProps
-  } = options
+  } = options;
 
-  function render(vnode, container) {
+  function render (vnode, container) {
     if (vnode) {
-      patch(container._vnode, vnode, container)
+      patch(container._vnode, vnode, container);
     } else {
       if (container._vnode) {
-        unmount(container._vnode)
+        unmount(container._vnode);
       }
     }
-    container._vnode = vnode
+    container._vnode = vnode;
   }
 
-  function patch(n1, n2, container) {
+  function patch (n1, n2, container, anchor) {
     if (n1 && n1.type !== n2.type) {
-      unmount(n1)
-      n1 = null
+      unmount(n1);
+      n1 = null;
     }
-    const { type } = n2
+    const { type } = n2;
     if (typeof type === 'string') {
       if (!n1) {
-        mountElement(n2, container)
+        mountElement(n2, container, anchor);
       } else {
-        patchElement(n1, n2)
+        patchElement(n1, n2);
       }
-    } else if (typeof type === TYPE_ENUM.TEXT) {
+    } else if (type === TYPE_ENUM.TEXT) {
       if (!n1) {
-        const el = n2.el = createText(n2, n2.children)
-        insert(el, container)
+        const el = n2.el = createText(n2.children);
+        insert(el, container);
       } else {
-        const el = n2.el = n1.el
+        const el = n2.el = n1.el;
         if (n2.children !== n1.children) {
-          setText(el, n2.children)
+          setText(el, n2.children);
         }
       }
-    } else if (typeof type === TYPE_ENUM.FRAGMENT) {
+    } else if (type === TYPE_ENUM.FRAGMENT) {
       if (!n1) {
-        n2.children.forEach(c => patch(null, c, container))
+        n2.children.forEach(c => patch(null, c, container));
       } else {
-        patchChildren(n1, n2, container)
+        patchChildren(n1, n2, container);
       }
-    } else if (typeof type === TYPE_ENUM.COMMENT) {
+    } else if (type === TYPE_ENUM.COMMENT) {
       if (!n1) {
-        const el = n2.el = createComment(n2, n2.children)
-        insert(el, container)
+        const el = n2.el = createComment(n2.children);
+        insert(el, container);
       } else {
-        const el = n2.el = n1.el
+        const el = n2.el = n1.el;
         if (n2.children !== n1.children) {
-          setComment(el, n2.children)
+          setComment(el, n2.children);
         }
       }
     }
   }
 
-  function patchElement(n1, n2) {
-    const el = n2.el = n1.el
-    const oldProps = n1.props
-    const newProps = n2.props
+  function patchElement (n1, n2) {
+    const el = n2.el = n1.el;
+    const oldProps = n1.props;
+    const newProps = n2.props;
 
     if (oldProps && newProps) {
       for (const key in newProps) {
         if (newProps[key] !== oldProps[key]) {
-          patchProps(el, key, oldProps[key], newProps[key])
+          patchProps(el, key, oldProps[key], newProps[key]);
         }
       }
 
       for (const key in oldProps) {
         if (!(key in newProps)) {
-          patchProps(el, key, oldProps[key], null)
+          patchProps(el, key, oldProps[key], null);
         }
       }
     } else if (oldProps && !newProps) {
       for (const key in oldProps) {
-        patchProps(el, key, oldProps[key], null)
+        patchProps(el, key, oldProps[key], null);
       }
     } else if (!oldProps && newProps) {
       for (const key in newProps) {
-        patchProps(el, key, null, newProps[key])
+        patchProps(el, key, null, newProps[key]);
       }
     }
 
-    patchChildren(n1, n2, el)
+    patchChildren(n1, n2, el);
   }
 
-  function patchChildren(n1, n2, container) {
+  function patchChildren (n1, n2, container) {
     if (typeof n2.children === 'string') {
       if (Array.isArray(n1.children)) {
-        n1.children.forEach(c => unmount(c))
+        n1.children.forEach(c => unmount(c));
       }
-      setElementText(container, n2.children)
+      setElementText(container, n2.children);
     } else if (Array.isArray(n2.children)) {
-      if (Array.isArray(n2.children)) {
-        // TODO:
+      if (Array.isArray(n1.children)) {
+        diff(n1, n2, container);
       } else {
-        setElementText(container, '')
-        n2.children.forEach(c => patch(null, c, container))
+        setElementText(container, '');
+        n2.children.forEach(c => patch(null, c, container));
       }
     } else {
       if (Array.isArray(n1.children)) {
-        n1.children.forEach(c => unmount(c))
+        n1.children.forEach(c => unmount(c));
       } else if (typeof n2.children === 'string') {
-        setElementText(container, '')
+        setElementText(container, '');
       }
     }
   }
 
-  function mountElement(vnode, container) {
-    const el = vnode.el = createElement(vnode.type)
+  function mountElement (vnode, container, anchor) {
+    const el = vnode.el = createElement(vnode.type);
 
     if (typeof vnode.children === 'string') {
-      setElementText(el, vnode.children)
+      setElementText(el, vnode.children);
     } else if (Array.isArray(vnode.children)) {
       vnode.children.forEach(child => {
-        patch(null, child, el)
-      })
+        patch(null, child, el);
+      });
     }
 
     if (vnode.props) {
       for (const key in vnode.props) {
-        patchProps(el, key, null, vnode.props[key])
+        patchProps(el, key, null, vnode.props[key]);
       }
     }
 
-    insert(el, container)
+    insert(el, container, anchor);
   }
 
-  function unmount(vnode) {
+  function unmount (vnode) {
     if (vnode.type === TYPE_ENUM.FRAGMENT) {
-      vnode.children.forEach(c => unmount(c))
-      return
+      vnode.children.forEach(c => unmount(c));
+      return;
     }
-    const parent = vnode.el.parentNode
+    const parent = vnode.el.parentNode;
     if (parent) {
-      parent.removeChild(vnode.el)
+      parent.removeChild(vnode.el);
     }
   }
+
+  diff.createElement = createElement;
+  diff.setElementText = setElementText;
+  diff.createText = createText;
+  diff.setText = setText;
+  diff.createComment = createComment;
+  diff.setComment = setComment;
+  diff.insert = insert;
+  diff.patchProps = patchProps;
+
+  diff.render = render;
+  diff.patch = patch;
+  diff.patchElement = patchElement;
+  diff.patchChildren = patchChildren;
+  diff.mountElement = mountElement;
+  diff.unmount = unmount;
 
   return {
     render
-  }
-}
+  };
+};
 
 var shouldSetAsProps = function (el, key, value) {
-  if (key === 'form' && el.tagName === 'INPUT') return false
+  if (key === 'form' && el.tagName === 'INPUT') return false;
 
-  return key in el
-}
+  return key in el;
+};
 
 var normalizeClass = function (className) {
   if (typeof className === 'string') {
-    return className
+    return className;
   } else if (Array.isArray(className)) {
-    return className.map(item => normalizeClass(item)).filter(Boolean).join(' ')
+    return className.map(item => normalizeClass(item)).filter(Boolean).join(' ');
   } else if (Object.prototype.toString.call(className) === '[object Object]') {
-    const classList = Object.entries(className).filter(([k, v]) => v).map(([k]) => k)
-    return normalizeClass(classList)
+    const classList = Object.entries(className).filter(([k, v]) => v).map(([k]) => k);
+    return normalizeClass(classList);
   }
-  return ''
-}
+  return '';
+};
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++
 
-const oldNode = {
-  type: 'div',
-  props: {
-    id: 'foo',
-    class: [
-      'a',
-      { b: true },
-      [
-        'c',
-        { d: false },
-        ['e']
-      ]
+loadScript('./vue/简单diff.js', () => {
+  const oldNode = {
+    type: 'div',
+    key: 0,
+    props: {
+      id: 'foo',
+      class: [
+        'a',
+        { b: true },
+        [
+          'c',
+          { d: false },
+          ['e']
+        ]
+      ],
+      onClick: () => {
+        alert('clicked');
+      }
+    },
+    children: [
+      { type: TYPE_ENUM.TEXT, children: '0', key: 0 },
+      { type: 'p', children: '1', key: 1 },
+      { type: 'p', children: '2', key: 2 },
+      { type: 'p', children: '3', key: 3 }
     ],
-    onClick: () => {
-      alert('clicked')
-    }
-  },
-  children: [
-    { type: TYPE_ENUM.TEXT, children: '0', key: 0 },
-    { type: 'p', children: '1', key: 1 },
-    { type: 'p', children: '2', key: 2 },
-    { type: 'p', children: '3', key: 3 }
-  ],
-}
+  };
 
-const newNode = {
-  type: 'div',
-  props: {
-    id: 'bar'
-  },
-  children: [
-    { type: TYPE_ENUM.COMMENT, children: '0', key: 0 },
-    { type: 'p', children: 'world', key: 3 },
-    { type: 'p', children: '2', key: 1 },
-    { type: 'p', children: '3', key: 2 }
-  ],
-}
+  const newNode = {
+    type: 'div',
+    key: 0,
+    props: {
+      id: 'bar'
+    },
+    children: [
+      { type: TYPE_ENUM.COMMENT, children: '0', key: 0 },
+      { type: 'p', children: 'world', key: 3 },
+      { type: 'p', children: '2', key: 1 },
+      { type: 'p', children: '3', key: 2 }
+    ],
+  };
 
-const renderer = createRender({
-  createElement(tag) {
-    return document.createElement(tag)
-  },
-  setElementText(el, text) {
-    el.textContent = text
-  },
-  insert(el, parent, anchor = null) {
-    parent.insertBefore(el, anchor)
-  },
-  createText(text) {
-    return document.createTextNode(text);
-  },
-  setText(el, text) {
-    el.setText(text)
-  },
-  createComment(text) {
-    return document.createComment(text);
-  },
-  setComment(el, text) {
-    console.log(el);
-  },
-  patchProps(el, key, prevValue, nextValue) {
-    if (/^on/.test(key)) {
-      const invokers = el._vei || (el._vei = {})
-      let invoker = invokers[key]
-      const name = key.slice(2).toLowerCase()
-      if (nextValue) {
-        if (!invoker) {
-          invoker = el._vei[key] = (e) => {
-            if (e.timeStamp < invoker.attached) return
-            if (Array.isArray(invoker.value)) {
-              invoker.value.forEach(fn => fn(e))
-            } else {
-              invoker.value(e)
-            }
+  const renderer = createRender({
+    createElement (tag) {
+      return document.createElement(tag);
+    },
+    setElementText (el, text) {
+      el.textContent = text;
+    },
+    insert (el, parent, anchor = null) {
+      parent.insertBefore(el, anchor);
+    },
+    createText (text) {
+      return document.createTextNode(text);
+    },
+    setText (el, text) {
+      el.setText(text);
+    },
+    createComment (text) {
+      return document.createComment(text);
+    },
+    setComment (el, text) {
+      el.textContent = text;
+    },
+    patchProps (el, key, prevValue, nextValue) {
+      if (/^on/.test(key)) {
+        const invokers = el._vei || (el._vei = {});
+        let invoker = invokers[key];
+        const name = key.slice(2).toLowerCase();
+        if (nextValue) {
+          if (!invoker) {
+            invoker = el._vei[key] = (e) => {
+              if (e.timeStamp < invoker.attached) return;
+              if (Array.isArray(invoker.value)) {
+                invoker.value.forEach(fn => fn(e));
+              } else {
+                invoker.value(e);
+              }
+            };
+            invoker.value = nextValue;
+            invoker.attached = performance.now();
+            el.addEventListener(name, invoker);
+          } else {
+            invoker.value = nextValue;
           }
-          invoker.value = nextValue
-          invoker.attached = performance.now()
-          el.addEventListener(name, invoker)
         } else {
-          invoker.value = nextValue
+          el.removeEventListener(name, invoker);
+        }
+      }
+      else if (key === 'class') {
+        el.className = nextValue ? normalizeClass(nextValue) : '';
+      }
+      // 使用 shouldSetAsProps 判断 是否应该作为 DOM Properties 设置
+      else if (shouldSetAsProps(el, key, nextValue)) {
+        const type = typeof el[key];
+        if (type === 'boolean' && nextValue === '') {
+          el[key] = true;
+        } else {
+          el[key] = nextValue;
         }
       } else {
-        el.removeEventListener(name, invoker)
+        el.setAttribute(key, nextValue);
       }
     }
-    else if (key === 'class') {
-      el.className = nextValue ? normalizeClass(nextValue) : ''
-    }
-    // 使用 shouldSetAsProps 判断 是否应该作为 DOM Properties 设置
-    else if (shouldSetAsProps(el, key, nextValue)) {
-      const type = typeof el[key];
-      if (type === 'boolean' && nextValue === '') {
-        el[key] = true;
-      } else {
-        el[key] = nextValue
-      }
-    } else {
-      el.setAttribute(key, nextValue);
-    }
-  }
-})
+  });
 
-renderer.render(oldNode, document.querySelector('#app'))
+  renderer.render(oldNode, document.querySelector('#app'));
 
-setTimeout(() => {
-  renderer.render(newNode, document.querySelector('#app'))
-}, 1000);
+  setTimeout(() => {
+    renderer.render(newNode, document.querySelector('#app'));
+  }, 1000);
+});
+
+// +++++++++++++++++++++++++++++++++++++++++++++++++

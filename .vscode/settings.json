@@ -1,7 +1,34 @@
 {
-    "workbench.iconTheme": "material-icon-theme",
-    "[javascript]": {
-        "editor.defaultFormatter": "vscode.typescript-language-features"
-    },
-    // "editor.defaultFormatter": ""
+  // editor
+  "editor.tabSize": 2,
+  "editor.fontFamily": "Fira Code, Menlo, Monaco, 'Courier New', monospace",
+  "editor.fontLigatures": true,
+  "editor.renderWhitespace": "all",
+  "editor.suggestSelection": "first",
+  "editor.snippetSuggestions": "top",
+  "editor.guides.bracketPairs": true,
+  "editor.renderLineHighlight": "all",
+  "editor.inlineSuggest.enabled": true,
+  "editor.renderControlCharacters": true,
+  "editor.bracketPairColorization.enabled": true,
+  // "workbench.iconTheme": "material-icon-theme",
+
+  // 默认格式化工具选择prettier
+//   "editor.defaultFormatter": "esbenp.prettier-vscode",
+  // css上下空格
+  "css.format.spaceAroundSelectorSeparator": true,
+  "less.format.spaceAroundSelectorSeparator": true,
+  "scss.format.spaceAroundSelectorSeparator": true,
+  // javascript
+  // 语句结尾插入分号
+  "javascript.format.semicolons": "insert",
+  "typescript.format.semicolons": "insert",
+  // 函数括号前加空格
+  "javascript.format.insertSpaceBeforeFunctionParenthesis": true,
+  "typescript.format.insertSpaceBeforeFunctionParenthesis": true,
+
+  "[javascript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  }
+  // "editor.defaultFormatter": ""
 }
