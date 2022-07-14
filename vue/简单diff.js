@@ -26,6 +26,8 @@ var diff = function (n1, n2, container) {
 
         if (j < lastIndex) {
 
+          // console.log('key', newVNode.key, 'lastIndex', lastIndex, 'j', j);
+
           const prevVNode = newChildren[i - 1];
 
           if (prevVNode) {
@@ -73,7 +75,7 @@ var diff = function (n1, n2, container) {
 
     const oldVNode = oldChildren[i];
 
-    const has = newChildren.find(vnode => vnode.type === oldVNode.type);
+    const has = newChildren.find(vnode => vnode.key === oldVNode.key);
 
     if (!has) {
 

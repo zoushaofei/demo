@@ -29,6 +29,7 @@ var createRender = function (options) {
 
   function patch (n1, n2, container, anchor) {
     if (n1 && n1.type !== n2.type) {
+      anchor = anchor || n1.el.nextSibling;
       unmount(n1);
       n1 = null;
     }
@@ -42,7 +43,7 @@ var createRender = function (options) {
     } else if (type === TYPE_ENUM.TEXT) {
       if (!n1) {
         const el = n2.el = createText(n2.children);
-        insert(el, container);
+        insert(el, container, anchor);
       } else {
         const el = n2.el = n1.el;
         if (n2.children !== n1.children) {
@@ -58,7 +59,7 @@ var createRender = function (options) {
     } else if (type === TYPE_ENUM.COMMENT) {
       if (!n1) {
         const el = n2.el = createComment(n2.children);
-        insert(el, container);
+        insert(el, container, anchor);
       } else {
         const el = n2.el = n1.el;
         if (n2.children !== n1.children) {
@@ -212,7 +213,7 @@ loadScript('./vue/简单diff.js', () => {
       }
     },
     children: [
-      { type: TYPE_ENUM.TEXT, children: '0', key: 0 },
+      { type: TYPE_ENUM.COMMENT, children: '0', key: 0 },
       { type: 'p', children: '1', key: 1 },
       { type: 'p', children: '2', key: 2 },
       { type: 'p', children: '3', key: 3 }
@@ -226,7 +227,7 @@ loadScript('./vue/简单diff.js', () => {
       id: 'bar'
     },
     children: [
-      { type: TYPE_ENUM.COMMENT, children: '0', key: 0 },
+      { type: TYPE_ENUM.TEXT, children: '0', key: 0 },
       { type: 'p', children: 'world', key: 3 },
       { type: 'p', children: '2', key: 1 },
       { type: 'p', children: '3', key: 2 }
@@ -302,6 +303,8 @@ loadScript('./vue/简单diff.js', () => {
   setTimeout(() => {
     renderer.render(newNode, document.querySelector('#app'));
   }, 1000);
+
+  // 简单diff 当前案例 outCount = 8;innerCount = 10
 });
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++
