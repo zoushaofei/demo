@@ -1,3 +1,0 @@
-var diff = function (n1, n2, container) {
-
-};

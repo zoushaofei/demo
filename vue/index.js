@@ -13,7 +13,8 @@ var createRender = function (options) {
     createComment,
     setComment,
     insert,
-    patchProps
+    patchProps,
+    diff
   } = options;
 
   function render (vnode, container) {
@@ -191,9 +192,74 @@ var normalizeClass = function (className) {
   return '';
 };
 
+const createRenderer = diff => createRender({
+  diff,
+  createElement (tag) {
+    return document.createElement(tag);
+  },
+  setElementText (el, text) {
+    el.textContent = text;
+  },
+  insert (el, parent, anchor = null) {
+    parent.insertBefore(el, anchor);
+  },
+  createText (text) {
+    return document.createTextNode(text);
+  },
+  setText (el, text) {
+    el.setText(text);
+  },
+  createComment (text) {
+    return document.createComment(text);
+  },
+  setComment (el, text) {
+    el.textContent = text;
+  },
+  patchProps (el, key, prevValue, nextValue) {
+    if (/^on/.test(key)) {
+      const invokers = el._vei || (el._vei = {});
+      let invoker = invokers[key];
+      const name = key.slice(2).toLowerCase();
+      if (nextValue) {
+        if (!invoker) {
+          invoker = el._vei[key] = (e) => {
+            if (e.timeStamp < invoker.attached) return;
+            if (Array.isArray(invoker.value)) {
+              invoker.value.forEach(fn => fn(e));
+            } else {
+              invoker.value(e);
+            }
+          };
+          invoker.value = nextValue;
+          invoker.attached = performance.now();
+          el.addEventListener(name, invoker);
+        } else {
+          invoker.value = nextValue;
+        }
+      } else {
+        el.removeEventListener(name, invoker);
+      }
+    }
+    else if (key === 'class') {
+      el.className = nextValue ? normalizeClass(nextValue) : '';
+    }
+    // 使用 shouldSetAsProps 判断 是否应该作为 DOM Properties 设置
+    else if (shouldSetAsProps(el, key, nextValue)) {
+      const type = typeof el[key];
+      if (type === 'boolean' && nextValue === '') {
+        el[key] = true;
+      } else {
+        el[key] = nextValue;
+      }
+    } else {
+      el.setAttribute(key, nextValue);
+    }
+  }
+});
+
 // +++++++++++++++++++++++++++++++++++++++++++++++++
 
-loadScript('./vue/简单diff.js', () => {
+loadScript('./vue/simpleDiff.js', (event, { diff }) => {
   const oldNode = {
     type: 'div',
     key: 0,
@@ -216,7 +282,8 @@ loadScript('./vue/简单diff.js', () => {
       { type: TYPE_ENUM.COMMENT, children: '0', key: 0 },
       { type: 'p', children: '1', key: 1 },
       { type: 'p', children: '2', key: 2 },
-      { type: 'p', children: '3', key: 3 }
+      { type: 'p', children: '3', key: 3 },
+      { type: 'p', children: '4', key: 4 }
     ],
   };
 
@@ -227,84 +294,138 @@ loadScript('./vue/简单diff.js', () => {
       id: 'bar'
     },
     children: [
+      { type: 'p', children: '5', key: 5 },
       { type: TYPE_ENUM.TEXT, children: '0', key: 0 },
-      { type: 'p', children: 'world', key: 3 },
-      { type: 'p', children: '2', key: 1 },
-      { type: 'p', children: '3', key: 2 }
+      { type: 'p', children: '4', key: 4 },
+      { type: 'p', children: '2', key: 2 },
+      { type: 'p', children: '1', key: 1 },
+      { type: 'p', children: '3', key: 3 }
     ],
   };
 
-  const renderer = createRender({
-    createElement (tag) {
-      return document.createElement(tag);
-    },
-    setElementText (el, text) {
-      el.textContent = text;
-    },
-    insert (el, parent, anchor = null) {
-      parent.insertBefore(el, anchor);
-    },
-    createText (text) {
-      return document.createTextNode(text);
-    },
-    setText (el, text) {
-      el.setText(text);
-    },
-    createComment (text) {
-      return document.createComment(text);
-    },
-    setComment (el, text) {
-      el.textContent = text;
-    },
-    patchProps (el, key, prevValue, nextValue) {
-      if (/^on/.test(key)) {
-        const invokers = el._vei || (el._vei = {});
-        let invoker = invokers[key];
-        const name = key.slice(2).toLowerCase();
-        if (nextValue) {
-          if (!invoker) {
-            invoker = el._vei[key] = (e) => {
-              if (e.timeStamp < invoker.attached) return;
-              if (Array.isArray(invoker.value)) {
-                invoker.value.forEach(fn => fn(e));
-              } else {
-                invoker.value(e);
-              }
-            };
-            invoker.value = nextValue;
-            invoker.attached = performance.now();
-            el.addEventListener(name, invoker);
-          } else {
-            invoker.value = nextValue;
-          }
-        } else {
-          el.removeEventListener(name, invoker);
-        }
-      }
-      else if (key === 'class') {
-        el.className = nextValue ? normalizeClass(nextValue) : '';
-      }
-      // 使用 shouldSetAsProps 判断 是否应该作为 DOM Properties 设置
-      else if (shouldSetAsProps(el, key, nextValue)) {
-        const type = typeof el[key];
-        if (type === 'boolean' && nextValue === '') {
-          el[key] = true;
-        } else {
-          el[key] = nextValue;
-        }
-      } else {
-        el.setAttribute(key, nextValue);
-      }
-    }
-  });
+  const renderer = createRenderer(diff)
 
-  renderer.render(oldNode, document.querySelector('#app'));
+  renderer.render(oldNode, document.querySelector('#simple-diff'));
 
   setTimeout(() => {
-    renderer.render(newNode, document.querySelector('#app'));
+    renderer.render(newNode, document.querySelector('#simple-diff'));
   }, 1000);
 
-  // 简单diff 当前案例 outCount = 8;innerCount = 10
-});
+  // 简单diff 当前案例 outCount 11 innerCount 20
+}, 'simpleDiff');
+
+// +++++++++++++++++++++++++++++++++++++++++++++++++
+
+loadScript('./vue/doubleEndDiff.js', (event, { diff }) => {
+  const oldNode = {
+    type: 'div',
+    key: 0,
+    props: {
+      id: 'foo',
+      class: [
+        'a',
+        { b: true },
+        [
+          'c',
+          { d: false },
+          ['e']
+        ]
+      ],
+      onClick: () => {
+        alert('clicked');
+      }
+    },
+    children: [
+      { type: TYPE_ENUM.COMMENT, children: '0', key: 0 },
+      { type: 'p', children: '1', key: 1 },
+      { type: 'p', children: '2', key: 2 },
+      { type: 'p', children: '3', key: 3 },
+      { type: 'p', children: '4', key: 4 }
+    ],
+  };
+
+  const newNode = {
+    type: 'div',
+    key: 0,
+    props: {
+      id: 'bar'
+    },
+    children: [
+      { type: 'p', children: '5', key: 5 },
+      { type: TYPE_ENUM.TEXT, children: '0', key: 0 },
+      { type: 'p', children: '4', key: 4 },
+      { type: 'p', children: '2', key: 2 },
+      { type: 'p', children: '1', key: 1 },
+      { type: 'p', children: '3', key: 3 }
+    ],
+  };
+
+  const renderer = createRenderer(diff)
+
+  renderer.render(oldNode, document.querySelector('#double-end-diff'));
+
+  setTimeout(() => {
+    renderer.render(newNode, document.querySelector('#double-end-diff'));
+  }, 1000);
+
+  // 双端diff 当前案例 count 5
+}, 'doubleEndDiff');
+
+// +++++++++++++++++++++++++++++++++++++++++++++++++
+
+loadScript('./vue/fastDiff.js', (event, { diff }) => {
+  const oldNode = {
+    type: 'div',
+    key: 0,
+    props: {
+      id: 'foo',
+      class: [
+        'a',
+        { b: true },
+        [
+          'c',
+          { d: false },
+          ['e']
+        ]
+      ],
+      onClick: () => {
+        alert('clicked');
+      }
+    },
+    children: [
+      { type: TYPE_ENUM.COMMENT, children: '0', key: 0 },
+      { type: 'p', children: '1', key: 1 },
+      { type: 'p', children: '2', key: 2 },
+      { type: 'p', children: '3', key: 3 },
+      { type: 'p', children: '4', key: 4 }
+    ],
+  };
+
+  const newNode = {
+    type: 'div',
+    key: 0,
+    props: {
+      id: 'bar'
+    },
+    children: [
+      { type: 'p', children: '5', key: 5 },
+      { type: TYPE_ENUM.TEXT, children: '0', key: 0 },
+      { type: 'p', children: '4', key: 4 },
+      { type: 'p', children: '2', key: 2 },
+      { type: 'p', children: '1', key: 1 },
+      { type: 'p', children: '3', key: 3 }
+    ],
+  };
+
+  const renderer = createRenderer(diff)
+
+  renderer.render(oldNode, document.querySelector('#fast-diff'));
+
+  setTimeout(() => {
+    renderer.render(newNode, document.querySelector('#fast-diff'));
+  }, 1000);
+
+  // 快速diff 当前案例 count ？
+}, 'fastDiff');
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++
