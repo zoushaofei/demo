@@ -9,7 +9,7 @@ function getSequence (arr) {
     const arrI = arr[i];
     if (arrI !== 0) {
       j = result[result.length - 1];
-      console.log('12', arr[j], arrI);
+      console.log(i, '12', arr[j], arrI);
       if (arr[j] < arrI) {
         p[i] = j;
         result.push(i);
@@ -17,6 +17,7 @@ function getSequence (arr) {
       }
       u = 0;
       v = result.length - 1;
+      console.log(i, '20', u, v, arr, result);
       while (u < v) {
         c = ((u + v) / 2) | 0;
         if (arr[result[c]] < arrI) {
@@ -25,6 +26,7 @@ function getSequence (arr) {
           v = c;
         }
       }
+      console.log(i, '29', u, c);
       if (arrI < arr[result[u]]) {
         if (u > 0) {
           p[i] = result[u - 1];
@@ -44,5 +46,5 @@ function getSequence (arr) {
   return result;
 }
 
-getSequence([1, 2, 3, 4, 5, 0]);
+getSequence([1, 2, 3, 10, 4, 5]);
 

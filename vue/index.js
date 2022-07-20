@@ -1,3 +1,7 @@
+import createSimpleDiff from "./diff/doubleEndDiff.js";
+import createDoubleEndDiff from "./diff/doubleEndDiff.js";
+import createFastDiff from "./diff/fastDiff.js";
+
 const TYPE_ENUM = {
   TEXT: Symbol('text'),
   COMMENT: Symbol('comment'),
@@ -14,7 +18,7 @@ var createRender = function (options) {
     setComment,
     insert,
     patchProps,
-    diff
+    createDiff
   } = options;
 
   function render (vnode, container) {
@@ -40,6 +44,12 @@ var createRender = function (options) {
         mountElement(n2, container, anchor);
       } else {
         patchElement(n1, n2);
+      }
+    } else if (typeof type === 'object') {
+      if (!n1) {
+        mountComponent(n2, container, anchor);
+      } else {
+        patchComponent(n1, n2, anchor);
       }
     } else if (type === TYPE_ENUM.TEXT) {
       if (!n1) {
@@ -142,6 +152,18 @@ var createRender = function (options) {
     insert(el, container, anchor);
   }
 
+  function mountComponent (vnode, container, anchor) {
+    const componentOptions = vnode.type;
+    const { render, data } = componentOptions;
+    const state = reactive(data);
+    const subTree = render.call(state, state);
+    patch(null, subTree, container, anchor);
+  }
+
+  function patchComponent () {
+
+  }
+
   function unmount (vnode) {
     if (vnode.type === TYPE_ENUM.FRAGMENT) {
       vnode.children.forEach(c => unmount(c));
@@ -153,21 +175,15 @@ var createRender = function (options) {
     }
   }
 
-  diff.createElement = createElement;
-  diff.setElementText = setElementText;
-  diff.createText = createText;
-  diff.setText = setText;
-  diff.createComment = createComment;
-  diff.setComment = setComment;
-  diff.insert = insert;
-  diff.patchProps = patchProps;
-
-  diff.render = render;
-  diff.patch = patch;
-  diff.patchElement = patchElement;
-  diff.patchChildren = patchChildren;
-  diff.mountElement = mountElement;
-  diff.unmount = unmount;
+  const diff = createDiff({
+    ...options,
+    render,
+    patch,
+    patchElement,
+    patchChildren,
+    mountElement,
+    unmount,
+  });
 
   return {
     render
@@ -192,8 +208,8 @@ var normalizeClass = function (className) {
   return '';
 };
 
-const createRenderer = diff => createRender({
-  diff,
+const createRenderer = createDiff => createRender({
+  createDiff,
   createElement (tag) {
     return document.createElement(tag);
   },
@@ -257,175 +273,8 @@ const createRenderer = diff => createRender({
   }
 });
 
-// +++++++++++++++++++++++++++++++++++++++++++++++++
 
-loadScript('./vue/simpleDiff.js', (event, { diff }) => {
-  const oldNode = {
-    type: 'div',
-    key: 0,
-    props: {
-      id: 'foo',
-      class: [
-        'a',
-        { b: true },
-        [
-          'c',
-          { d: false },
-          ['e']
-        ]
-      ],
-      onClick: () => {
-        alert('clicked');
-      }
-    },
-    children: [
-      { type: TYPE_ENUM.COMMENT, children: '0', key: 0 },
-      { type: 'p', children: '1', key: 1 },
-      { type: 'p', children: '2', key: 2 },
-      { type: 'p', children: '3', key: 3 },
-      { type: 'p', children: '4', key: 4 }
-    ],
-  };
-
-  const newNode = {
-    type: 'div',
-    key: 0,
-    props: {
-      id: 'bar'
-    },
-    children: [
-      { type: 'p', children: '5', key: 5 },
-      { type: TYPE_ENUM.TEXT, children: '0', key: 0 },
-      { type: 'p', children: '4', key: 4 },
-      { type: 'p', children: '2', key: 2 },
-      { type: 'p', children: '1', key: 1 },
-      { type: 'p', children: '3', key: 3 }
-    ],
-  };
-
-  const renderer = createRenderer(diff)
-
-  renderer.render(oldNode, document.querySelector('#simple-diff'));
-
-  setTimeout(() => {
-    renderer.render(newNode, document.querySelector('#simple-diff'));
-  }, 1000);
-
-  // 简单diff 当前案例 outCount 11 innerCount 20
-}, 'simpleDiff');
-
-// +++++++++++++++++++++++++++++++++++++++++++++++++
-
-loadScript('./vue/doubleEndDiff.js', (event, { diff }) => {
-  const oldNode = {
-    type: 'div',
-    key: 0,
-    props: {
-      id: 'foo',
-      class: [
-        'a',
-        { b: true },
-        [
-          'c',
-          { d: false },
-          ['e']
-        ]
-      ],
-      onClick: () => {
-        alert('clicked');
-      }
-    },
-    children: [
-      { type: TYPE_ENUM.COMMENT, children: '0', key: 0 },
-      { type: 'p', children: '1', key: 1 },
-      { type: 'p', children: '2', key: 2 },
-      { type: 'p', children: '3', key: 3 },
-      { type: 'p', children: '4', key: 4 }
-    ],
-  };
-
-  const newNode = {
-    type: 'div',
-    key: 0,
-    props: {
-      id: 'bar'
-    },
-    children: [
-      { type: 'p', children: '5', key: 5 },
-      { type: TYPE_ENUM.TEXT, children: '0', key: 0 },
-      { type: 'p', children: '4', key: 4 },
-      { type: 'p', children: '2', key: 2 },
-      { type: 'p', children: '1', key: 1 },
-      { type: 'p', children: '3', key: 3 }
-    ],
-  };
-
-  const renderer = createRenderer(diff)
-
-  renderer.render(oldNode, document.querySelector('#double-end-diff'));
-
-  setTimeout(() => {
-    renderer.render(newNode, document.querySelector('#double-end-diff'));
-  }, 1000);
-
-  // 双端diff 当前案例 count 5
-}, 'doubleEndDiff');
-
-// +++++++++++++++++++++++++++++++++++++++++++++++++
-
-loadScript('./vue/fastDiff.js', (event, { diff }) => {
-  const oldNode = {
-    type: 'div',
-    key: 0,
-    props: {
-      id: 'foo',
-      class: [
-        'a',
-        { b: true },
-        [
-          'c',
-          { d: false },
-          ['e']
-        ]
-      ],
-      onClick: () => {
-        alert('clicked');
-      }
-    },
-    children: [
-      { type: TYPE_ENUM.COMMENT, children: '0', key: 0 },
-      { type: 'p', children: '1', key: 1 },
-      { type: 'p', children: '2', key: 2 },
-      { type: 'p', children: '3', key: 3 },
-      { type: 'p', children: '4', key: 4 }
-    ],
-  };
-
-  const newNode = {
-    type: 'div',
-    key: 0,
-    props: {
-      id: 'bar'
-    },
-    children: [
-      { type: 'p', children: '5', key: 5 },
-      { type: TYPE_ENUM.TEXT, children: '0', key: 0 },
-      { type: 'p', children: '4', key: 4 },
-      { type: 'p', children: '2', key: 2 },
-      { type: 'p', children: '1', key: 1 },
-      { type: 'p', children: '3', key: 3 }
-    ],
-  };
-
-  const renderer = createRenderer(diff)
-
-  renderer.render(oldNode, document.querySelector('#fast-diff'));
-
-  setTimeout(() => {
-    renderer.render(newNode, document.querySelector('#fast-diff'));
-  }, 1000);
-
-  // 快速diff 当前案例 count ？
-}, 'fastDiff');
-
-// +++++++++++++++++++++++++++++++++++++++++++++++++
+export const simpleDiffRender = createRenderer(createSimpleDiff).render;
+export const doubleEndDiffRender = createRenderer(createDoubleEndDiff).render;
+export const fastDiffRender = createRenderer(createFastDiff).render;
+export const render = fastDiffRender;
