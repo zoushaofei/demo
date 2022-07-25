@@ -6,68 +6,108 @@ function diff (n1, n2, container) {
   const newChildren = n2.children;
 
   let j = 0;
-  let oldVNode = oldChildren[j];
-  let newVNode = newChildren[j];
-
-  while (oldVNode.key === newVNode.key) {
-    diff.patch(oldVNode, newVNode, container);
-    j++;
-    oldVNode = oldChildren[j];
-    newVNode = newChildren[j];
-
-    loopCount++;
-  }
 
   let oldEnd = oldChildren.length - 1;
   let newEnd = newChildren.length - 1;
 
-  oldVNode = oldChildren[oldEnd];
-  newVNode = newChildren[newEnd];
+  let oldVNode;
+  let newVNode;
 
-  while (oldVNode.key === newVNode.key) {
-    diff.patch(oldVNode, newVNode, container);
-    oldVNode = oldChildren[--oldEnd];
-    newVNode = newChildren[--newEnd];
+  // 1. sync from start
+  // (a b) c
+  // (a b) d e
+  while (j <= oldEnd && j <= newEnd) {
+    // 同步头部相同的
+    oldVNode = oldChildren[j];
+    newVNode = newChildren[j];
+    if (oldVNode.key === newVNode.key) {
+      diff.patch(oldVNode, newVNode, container);
+    } else {
+      break;
+    }
+    j++;
 
     loopCount++;
   }
 
+  // 2. sync from end
+  // a (b c)
+  // d e (b c)
+  while (j <= oldEnd && j <= newEnd) {
+    // 同步尾部相同的
+    oldVNode = oldChildren[oldEnd];
+    newVNode = newChildren[newEnd];
+    if (oldVNode.key === newVNode.key) {
+      diff.patch(oldVNode, newVNode, container);
+    } else {
+      break;
+    }
+    oldEnd--;
+    newEnd--;
+
+    loopCount++;
+  }
+
+  // 3. common sequence + mount
+  // old: (a b)
+  // new: (a b) c
+  // j = 2, oldEnd = 1, newEnd = 2
+  // old: (a b)
+  // new: c (a b)
+  // j = 0, oldEnd = -1, newEnd = 0
   if (j > oldEnd && j <= newEnd) {
+    // 只有新增的情况
     const anchorIndex = newEnd + 1;
     const anchor = anchorIndex < newChildren.length ? newChildren[anchorIndex].el : null;
     while (j <= newEnd) {
-      diff.patch(oldVNode, newChildren[j++], container, anchor);
+      diff.patch(null, newChildren[j++], container, anchor);
 
       loopCount++;
     }
-  } else if (j > newEnd && j <= oldEnd) {
+  }
+
+  // 4. common sequence + unmount
+  // old: (a b) c
+  // new: (a b)
+  // j = 2, oldEnd = 2, newEnd = 1
+  // old: a (b c)
+  // new: (b c)
+  // j = 0, oldEnd = 0, newEnd = -1
+  else if (j > newEnd && j <= oldEnd) {
+    // 只有卸载的情况
     while (j <= oldEnd) {
       diff.unmount(oldChildren[j++]);
 
       loopCount++;
     }
-  } else {
-    const count = newEnd - j + 1;
-    const source = new Array(count);
-    source.fill(-1);
+  }
+  // 5. unknown sequence
+  // [j ... oldEnd + 1]: a b [c d e] f g
+  // [j ... newEnd + 1]: a b [e d c h] f g
+  // j = 2, oldEnd = 4, newEnd = 5
+  else {
+    // 包含新增与卸载的情况
+    const oldStart = j; // prev starting index
+    const newStart = j; // next starting index
 
-    const oldState = j;
-    const newStart = j;
-
-    let moved = false;
-    let pos = 0;
-
+    // 5.1 build key:index map for newChildren
     const keyIndex = {};
-
     for (let i = newStart; i < newEnd; i++) {
       keyIndex[newChildren[i].key] = i;
 
       loopCount++;
     }
 
+    // 5.2 loop through old children left to be patched and try to patch
+    // matching nodes & remove nodes that are no longer present
+    const count = newEnd - j + 1;
+    const source = new Array(count);
+    source.fill(-1);
+    let pos = 0;
+    let moved = false;
     let patched = false;
 
-    for (let i = oldState; i <= oldEnd; i++) {
+    for (let i = oldStart; i <= oldEnd; i++) {
       oldVNode = oldChildren[i];
       if (patched <= count) {
         const k = keyIndex[oldVNode.key];
@@ -85,17 +125,21 @@ function diff (n1, n2, container) {
           diff.unmount(oldVNode);
         }
       } else {
+        // all new children have been patched so this can only be a removal
         diff.unmount(oldVNode);
       }
 
       loopCount++;
     }
 
+    // 5.3 move and mount
+    // generate longest stable subsequence only when nodes have moved
     if (moved) {
-      const seq = lis(source);
+      const seq = getSequence(source);
       let s = seq.length - 1;
       let i = count - 1;
 
+      // looping backwards so that we can use last patched node as anchor
       for (i; i >= 0; i--) {
         if (source[i] === -1) {
           const pos = i + newStart;
@@ -164,8 +208,6 @@ function getSequence (arr) {
   }
   return result;
 }
-
-var lis = getSequence;
 
 export default function createDiff (options) {
   return Object.assign(diff, options);

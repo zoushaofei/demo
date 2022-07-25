@@ -1,3 +1,6 @@
+import { effect, reactive, shallowReactive } from "./reactivity/index.js";
+import { queueJob } from "./utils.js";
+
 import createSimpleDiff from "./diff/doubleEndDiff.js";
 import createDoubleEndDiff from "./diff/doubleEndDiff.js";
 import createFastDiff from "./diff/fastDiff.js";
@@ -154,14 +157,107 @@ var createRender = function (options) {
 
   function mountComponent (vnode, container, anchor) {
     const componentOptions = vnode.type;
-    const { render, data } = componentOptions;
-    const state = reactive(data);
-    const subTree = render.call(state, state);
-    patch(null, subTree, container, anchor);
+    // 生命周期勾子
+    const { render, data, props: propsOptions, beforeCreate, created, beforeMount, mounted, beforeUpdate, updated } = componentOptions;
+    beforeCreate && beforeCreate();
+    const state = reactive(data());
+    const [props, attrs] = resolveProps(propsOptions, vnode.props);
+    // 定义组件实例
+    const instance = {
+      state,
+      props: shallowReactive(props),
+      isMounted: false,
+      subTree: null
+    };
+    vnode.component = instance;
+
+    // 渲染上下文对象，本质是组件实例的代理
+    // 完整的组件还应包含 methods、computed 等选项中定义的数据和方法，这些内容都应在渲染上下文中处理
+    const renderContext = new Proxy(instance, {
+      get (t, k, r) {
+        const { state, props } = t;
+        if (state && k in state) {
+          return state[k];
+        } else if (k in props) {
+          return props[k];
+        } else {
+          console.log('不存在');
+        }
+      },
+      set (t, k, v, r) {
+        const { state, props } = t;
+        if (state && k in state) {
+          state[k] = v;
+          return true;
+        } else if (k in props) {
+          console.warn(`Attempting to mutate prop "${k}". Props are Readonly.`);
+        } else {
+          console.log('不存在');
+        }
+        return false;
+      }
+    });
+
+    created && created.call(renderContext);
+
+    effect(() => {
+      const subTree = render.call(renderContext, renderContext);
+      if (!instance.isMounted) {
+        beforeMount && beforeMount.call(renderContext);
+        patch(null, subTree, container, anchor);
+        instance.isMounted = true;
+        mounted && mounted.call(renderContext);
+      } else {
+        beforeUpdate && beforeUpdate.call(renderContext);
+        patch(instance.subTree, subTree, container, anchor);
+        updated && updated.call(renderContext);
+      }
+      instance.subTree = subTree;
+    }, { scheduler: queueJob });
   }
 
-  function patchComponent () {
+  function resolveProps (options, propsData) {
+    const props = {};
+    const attrs = {};
+    for (const key in propsData) {
+      if (key in options) {
+        props[key] = propsData[key];
+      } else {
+        attrs[key] = propsData[key];
+      }
+    }
+    return [props, attrs];
+  }
 
+  function patchComponent (n1, n2, anchor) {
+    const instance = (n2.component = n1.component);
+    const { props } = instance;
+
+    if (hasPropsChanged(n1.props, n2.props)) {
+      const [nextProps] = resolveProps(n2.type.props, n2.props);
+      for (const k in nextProps) {
+        props[k] = nextProps[k];
+      }
+      for (const k in props) {
+        if (!(k in nextProps)) {
+          delete props[k];
+        }
+      }
+    }
+  }
+
+  function hasPropsChanged (prevProps, nextProps) {
+    const nextKeys = Object.keys(nextProps);
+    if (nextKeys.length !== Object.keys(prevProps).length) {
+      return true;
+    }
+    for (let i = 0; i < nextKeys.length; i++) {
+      const key = nextKeys[i];
+      if (nextProps[key] !== prevProps[key]) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function unmount (vnode) {
