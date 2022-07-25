@@ -196,8 +196,8 @@ const test_3 = () => {
 };
 
 const test = () => {
-  const MyComponent = {
-    name: 'MyComponent',
+  const Comp1 = {
+    name: 'Comp1',
     props: {
       msg: String
     },
@@ -230,11 +230,41 @@ const test = () => {
         type: 'div',
         props: {
           onClick: (e) => {
-            console.log('div onClick', this);
             this.count++;
           }
         },
-        children: `msg : ${this.msg}; count : ${this.count}`
+        children: [
+          { key: 0, type: 'p', children: `this is Comp1, ${this.msg}` },
+          { key: 1, type: 'p', children: `count is: ${this.count}` }
+        ]
+      };
+    }
+  };
+
+  const Comp2 = {
+    setup () {
+      return () => {
+        return { type: 'div', children: 'this is Comp2' };
+      };
+    }
+  };
+
+  const Comp3 = {
+    setup () {
+      const count = ref(0);
+      const clickHandler = () => {
+        count.value++;
+      };
+      return {
+        count,
+        clickHandler
+      };
+    },
+    render () {
+      return {
+        type: 'div',
+        props: { onClick: this.clickHandler },
+        children: `this is Comp3, count is: ${this.count}`
       };
     }
   };
@@ -256,7 +286,6 @@ const test = () => {
             type: 'button',
             props: {
               onClick: () => {
-                console.log('button onClick', this);
                 this.msg = Date.now();
               }
             },
@@ -264,10 +293,18 @@ const test = () => {
           },
           {
             key: 1,
-            type: MyComponent,
+            type: Comp1,
             props: {
               msg: this.msg
             },
+          },
+          {
+            key: 2,
+            type: Comp2,
+          },
+          {
+            key: 3,
+            type: Comp3,
           }
         ]
       };

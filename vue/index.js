@@ -1,4 +1,4 @@
-import { effect, reactive, shallowReactive } from "./reactivity/index.js";
+import { effect, reactive, proxyRefs, shallowReactive, shallowReadonly } from "./reactivity/index.js";
 import { queueJob } from "./utils.js";
 
 import createSimpleDiff from "./diff/doubleEndDiff.js";
@@ -158,9 +158,9 @@ var createRender = function (options) {
   function mountComponent (vnode, container, anchor) {
     const componentOptions = vnode.type;
     // 生命周期勾子
-    const { render, data, props: propsOptions, beforeCreate, created, beforeMount, mounted, beforeUpdate, updated } = componentOptions;
+    let { render, data, setup, props: propsOptions, beforeCreate, created, beforeMount, mounted, beforeUpdate, updated } = componentOptions;
     beforeCreate && beforeCreate();
-    const state = reactive(data());
+    const state = data ? reactive(data()) : null;
     const [props, attrs] = resolveProps(propsOptions, vnode.props);
     // 定义组件实例
     const instance = {
@@ -169,6 +169,18 @@ var createRender = function (options) {
       isMounted: false,
       subTree: null
     };
+
+    const setupContext = { attrs };
+    const setupResult = setup && setup(shallowReadonly(instance.props, setupContext));
+    let setupState = null;
+    if (typeof setupResult === 'function') {
+      if (render) {
+        console.error('setup 函数返回渲染函数，render 选项将被忽略');
+      }
+      render = setupResult;
+    } else {
+      setupState = setupResult ? proxyRefs(setupResult) : setupResult;
+    }
     vnode.component = instance;
 
     // 渲染上下文对象，本质是组件实例的代理
@@ -180,6 +192,8 @@ var createRender = function (options) {
           return state[k];
         } else if (k in props) {
           return props[k];
+        } else if (setupState && k in setupState) {
+          return setupState[k];
         } else {
           console.log('不存在');
         }
@@ -191,6 +205,9 @@ var createRender = function (options) {
           return true;
         } else if (k in props) {
           console.warn(`Attempting to mutate prop "${k}". Props are Readonly.`);
+        } else if (setupState && k in setupState) {
+          setupState[k] = v;
+          return true;
         } else {
           console.log('不存在');
         }
@@ -246,7 +263,7 @@ var createRender = function (options) {
     }
   }
 
-  function hasPropsChanged (prevProps, nextProps) {
+  function hasPropsChanged (prevProps = {}, nextProps = {}) {
     const nextKeys = Object.keys(nextProps);
     if (nextKeys.length !== Object.keys(prevProps).length) {
       return true;
