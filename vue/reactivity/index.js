@@ -299,7 +299,28 @@ function createReactive (data, isShallow = false, isReadonly = false) {
   return proxy;
 }
 
-export function ref (val) {
+
+// 深响应
+export function reactive (data) {
+  return createReactive(data);
+}
+
+// 浅响应
+export function shallowReactive (data) {
+  return createReactive(data, true);
+}
+
+// 只读
+export function readonly (data) {
+  return createReactive(data, false, true);
+}
+
+// 浅只读
+export function shallowReadonly (data) {
+  return createReactive(data, true, true);
+}
+
+function createRef (val, isShallow = false) {
   if (isRef(val)) {
     return val;
   }
@@ -307,8 +328,17 @@ export function ref (val) {
     value: val
   };
   Object.defineProperty(wrapper, '__v_isRef', { value: true });
-  return reactive(wrapper);
+  return isShallow ? shallowReactive(wrapper) : reactive(wrapper);
 }
+
+export function ref (val) {
+  return createRef(val);
+}
+
+export function shallowRef (val) {
+  return createRef(val, true);
+}
+
 
 function isRef (val) {
   return !!(val && val.__v_isRef === true);
@@ -360,27 +390,6 @@ export function proxyRefs (target) {
       return Reflect.set(target, key, newValue, receiver);
     }
   });
-}
-
-
-// 深响应
-export function reactive (data) {
-  return createReactive(data);
-}
-
-// 浅响应
-export function shallowReactive (data) {
-  return createReactive(data, true);
-}
-
-// 只读
-export function readonly (data) {
-  return createReactive(data, false, true);
-}
-
-// 浅只读
-export function shallowReadonly (data) {
-  return createReactive(data, true, true);
 }
 
 // 副作用函数的依赖进行追踪

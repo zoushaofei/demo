@@ -1,4 +1,4 @@
-import { render } from "./index.js";
+import { render, onMounted, defineAsyncComponent } from "./index.js";
 import { ref, toRefs, effect, watch, computed, reactive, shallowReactive } from "./reactivity/index.js";
 
 const oldNode = {
@@ -241,13 +241,32 @@ const test = () => {
     }
   };
 
-  const Comp2 = {
-    setup () {
-      return () => {
-        return { type: 'div', children: 'this is Comp2' };
-      };
+  const Comp2 = defineAsyncComponent({
+    delay: 3000,
+    loader: () => new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({
+          setup () {
+            onMounted(() => {
+              console.log('Comp2 onMounted');
+            });
+            return () => {
+              return { key: 0, type: 'div', children: 'this is Comp2' };
+            };
+          }
+        });
+      }, 5000);
+    }),
+    loadingComponent: {
+      render () {
+        return {
+          key: 0,
+          type: 'div',
+          children: 'loading'
+        };
+      }
     }
-  };
+  });
 
   const Comp3 = {
     setup () {
@@ -269,11 +288,21 @@ const test = () => {
     }
   };
 
+  const Comp4 = (props = {}) => ({
+    key: 0,
+    type: 'div',
+    children: `this is Comp4, text is: ${props.text}`
+  });
+  Comp4.props = {
+    text: String
+  };
+
   const vnode = {
     name: 'parent',
     data () {
       return {
-        msg: 'Hello World'
+        msg: 'Hello World',
+        text: 'show text'
       };
     },
     render () {
@@ -305,6 +334,13 @@ const test = () => {
           {
             key: 3,
             type: Comp3,
+          },
+          {
+            key: 4,
+            type: Comp4,
+            props: {
+              text: this.text
+            }
           }
         ]
       };

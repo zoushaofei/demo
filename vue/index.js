@@ -1,14 +1,21 @@
-import { effect, reactive, proxyRefs, shallowReactive, shallowReadonly } from "./reactivity/index.js";
+import { ref, effect, reactive, shallowRef, proxyRefs, shallowReactive, shallowReadonly } from "./reactivity/index.js";
 import { queueJob } from "./utils.js";
 
 import createSimpleDiff from "./diff/doubleEndDiff.js";
 import createDoubleEndDiff from "./diff/doubleEndDiff.js";
 import createFastDiff from "./diff/fastDiff.js";
 
+// 全局变量，存储当前正在被实例化的组件实例
+let currentInstance = null;
+
+function setCurrentInstance (instance) {
+  currentInstance = instance;
+}
+
 const TYPE_ENUM = {
   TEXT: Symbol('text'),
   COMMENT: Symbol('comment'),
-  FRAGMENT: Symbol('fragment'),
+  FRAGMENT: Symbol('fragment')
 };
 
 var createRender = function (options) {
@@ -37,7 +44,14 @@ var createRender = function (options) {
 
   function patch (n1, n2, container, anchor) {
     if (n1 && n1.type !== n2.type) {
-      anchor = anchor || n1.el.nextSibling;
+      if (!anchor && typeof n2.type === 'object') {
+        // 当新节点为组件时 确定新组件应插入的位置
+        if (n1.el) {
+          anchor = n1.el.nextSibling;
+        } else if (typeof n1.type === 'object' && n1.component?.subTree?.el) {
+          anchor = n1.component.subTree.el.nextSibling;
+        }
+      }
       unmount(n1);
       n1 = null;
     }
@@ -48,9 +62,16 @@ var createRender = function (options) {
       } else {
         patchElement(n1, n2);
       }
-    } else if (typeof type === 'object') {
+    } else if (typeof type === 'object' || typeof type === 'function') {
+      // type 为 object 是有状态组件
+      // type 为 function 是函数式组件
       if (!n1) {
-        mountComponent(n2, container, anchor);
+        if (n2.keepAlive) {
+          // 如果该组件已经被 keepAlive ，则不应重新挂载它，而是调用其父组件，即 KeepAlive 的 _activate 函数来激活它
+          n2.keepAlineInstance._activate(n2, container, anchor);
+        } else {
+          mountComponent(n2, container, anchor);
+        }
       } else {
         patchComponent(n1, n2, anchor);
       }
@@ -156,22 +177,63 @@ var createRender = function (options) {
   }
 
   function mountComponent (vnode, container, anchor) {
-    const componentOptions = vnode.type;
+    const isFunctional = typeof vnode.type === 'function';
+
+    let componentOptions = vnode.type;
+    if (isFunctional) {
+      componentOptions = {
+        render: vnode.type,
+        props: vnode.type.props
+      };
+    }
     // 生命周期勾子
     let { render, data, setup, props: propsOptions, beforeCreate, created, beforeMount, mounted, beforeUpdate, updated } = componentOptions;
     beforeCreate && beforeCreate();
     const state = data ? reactive(data()) : null;
     const [props, attrs] = resolveProps(propsOptions, vnode.props);
+    // 使用编译好的 children 对象作为 slots 对象即可
+    const slots = vnode.children || {};
     // 定义组件实例
     const instance = {
       state,
       props: shallowReactive(props),
       isMounted: false,
-      subTree: null
+      subTree: null,
+      slots,
+      mounted: [],
+      keepAliveCtx: null
     };
+    // 当前组件为 KeepAlive 是，为组件实例注入 keepAliveCtx
+    const isKeepAlive = componentOptions.__isKeepAlive;
+    if (isKeepAlive) {
+      instance.keepAliveCtx = {
+        move: (vnode, container, anchor) => {
+          insert(vnode.component.subTree.el, container, anchor);
+        },
+        unmount,
+        createElement
+      };
+    }
+    // 定义 emit 函数，它接受两个参数
+    // event ：时间名称
+    // payload ：传递给事件处理函数的参数
+    function emit (event, ...payload) {
+      const eventName = `on${event[0].toUpperCase() + event.slice(1)}`;
+      // 在组件实例的props中查找对应的处理函数
+      const handler = instance.props[eventName];
+      if (handler) {
+        handler(...payload);
+      } else {
+        console.log('事件不存在');
+      }
+    }
 
-    const setupContext = { attrs };
+    const setupContext = { attrs, slots, emit };
+    // 在调用 setup 前设置当前组件实例
+    setCurrentInstance(instance);
     const setupResult = setup && setup(shallowReadonly(instance.props, setupContext));
+    // 重置当前组件实例
+    setCurrentInstance(null);
     let setupState = null;
     if (typeof setupResult === 'function') {
       if (render) {
@@ -188,6 +250,7 @@ var createRender = function (options) {
     const renderContext = new Proxy(instance, {
       get (t, k, r) {
         const { state, props } = t;
+        if (k === '$slots') return slots;
         if (state && k in state) {
           return state[k];
         } else if (k in props) {
@@ -224,6 +287,7 @@ var createRender = function (options) {
         patch(null, subTree, container, anchor);
         instance.isMounted = true;
         mounted && mounted.call(renderContext);
+        instance.mounted && instance.mounted.forEach(hook => hook.call(renderContext));
       } else {
         beforeUpdate && beforeUpdate.call(renderContext);
         patch(instance.subTree, subTree, container, anchor);
@@ -237,7 +301,7 @@ var createRender = function (options) {
     const props = {};
     const attrs = {};
     for (const key in propsData) {
-      if (key in options) {
+      if (key in options || key.startsWith('on')) {
         props[key] = propsData[key];
       } else {
         attrs[key] = propsData[key];
@@ -280,6 +344,15 @@ var createRender = function (options) {
   function unmount (vnode) {
     if (vnode.type === TYPE_ENUM.FRAGMENT) {
       vnode.children.forEach(c => unmount(c));
+      return;
+    } else if (typeof vnode.type === 'object') {
+      if (vnode.shouldKeepAlive) {
+        // 对于需要被 KeepAlive 的组件，应当调用其父组件，即 KeepAlive 的 _deActivate 函数，使其失活
+        vnode.keepAlineInstance._deActivate(vnode);
+      } else {
+        // 对于要卸载组件，本质上是要卸载组件所渲染的内容，即 subTree
+        unmount(vnode.component.subTree);
+      }
       return;
     }
     const parent = vnode.el.parentNode;
@@ -385,6 +458,166 @@ const createRenderer = createDiff => createRender({
     }
   }
 });
+
+export function onMounted (fn) {
+  if (currentInstance) {
+    currentInstance.mounted.push(fn);
+  } else {
+    console.error('onMounted 函数只能在 setup 中调用');
+  }
+}
+
+export function defineAsyncComponent (options) {
+  if (typeof options === 'function') {
+    options = {
+      loader: options
+    };
+  }
+  const { loader } = options;
+
+  let innerComp = null;
+
+  return {
+    name: 'AsyncComponentWrapper',
+    setup () {
+      const loaded = ref(false);
+      const error = shallowRef(null);
+      const loading = ref(false);
+
+      let loadingTimer = null;
+      // 延迟显示 loading 状态
+      if (options.delay) {
+        loadingTimer = setTimeout(() => {
+          loading.value = true;
+        }, options.delay);
+      } else {
+        loading.value = true;
+      }
+
+      loader()
+        .then(c => {
+          innerComp = c;
+          loaded.value = true;
+        })
+        .catch(err => {
+          error.value = err;
+        })
+        .finally(err => {
+          loading.value = false;
+          clearTimeout(loadingTimer);
+        });
+
+      let timeoutTimer = null;
+      if (options.timeout) {
+        timeoutTimer = setTimeout(() => {
+          const err = new Error(`Async component timed out after ${options.timeout}ms`);
+          error.value = err;
+        }, options.timeout);
+      }
+      // 卸载组件时 应清除定时器
+
+      const placeholder = { key: 0, type: TYPE_ENUM.COMMENT, children: 'AsyncComponentWrapper' };
+
+      return () => {
+        if (loaded.value) {
+          return { key: 0, type: innerComp };
+        } else if (error.value && options.errorComponent) {
+          return { key: 0, type: options.errorComponent, props: { error: error.value } };
+        } else if (loading.value && options.loadingComponent) {
+          return { key: 0, type: options.loadingComponent };
+        } else {
+          return placeholder;
+        }
+      };
+    }
+  };
+}
+
+
+const KeepAlive = {
+  __isKeepAlive: true,
+  props: {
+    max: Number,
+    include: RegExp,
+    exclude: RegExp,
+  },
+  setup (props, { slots }) {
+    // key: vnode.type
+    // value: vnode
+    const cache = new Map();
+    // 记录已缓存的组件的 key
+    const keys = new Set();
+    // 当前的组件
+    let current = null;
+    const instance = currentInstance;
+    // 对于 KeepAlive 组件来说。它的实例上存在特殊的 keepAliveCtx 对象 该对象由渲染器注入
+    // 该对象会暴露渲染器内部的一些方法，其中 move 函数用来将一段 DOM 移动到另一个容器中
+    const { move, unmount, createElement } = instance.KeepAliveCtx;
+
+    // 创建隐藏容器
+    const storageContainer = createElement('div');
+
+    // 这两个函数会在渲染器中调用
+    instance._deActivate = (vnode) => {
+      // 使组件失活
+      move(vnode, storageContainer);
+    };
+    instance._activate = (vnode, container, anchor) => {
+      // 激活组件
+      move(vnode, container, anchor);
+    };
+
+    function pruneCacheEntry (key) {
+      cache.delete(key);
+      keys.delete(key);
+    }
+
+    return () => {
+      if (!slots.default) {
+        return null;
+      }
+      // KeepAlive 的默认插槽就是要被 KeepAlive 的组件
+      let rawVNode = slots.default();
+      // 如果不是组件，直接渲染即可，因为非组件的虚拟节点无法被 KeepAlive
+      if (typeof rawVNode !== 'object') {
+        return rawVNode;
+      }
+      const name = rawVNode.type.name;
+      if (name && (
+        props.include && !props.include.test(name) ||
+        props.exclude && props.exclude.test(name)
+      )) {
+        // 如果组件的 name 无法被 include 匹配，或者被 exclude 匹配，则直接进行渲染，不做缓存
+        return rawVNode;
+      }
+      const key = vnode.key == null ? rawVNode.type : rawVNode.key;
+      // 在挂载是先获取缓存的组件 vnode
+      const cachedVNode = cache.get(key);
+      if (cachedVNode) {
+        // 如果有缓存的内容，则说明不应该执行挂载，而应该执行激活
+        rawVNode.component = cachedVNode.component;
+        // 添加标记 避免被渲染器重新挂载它
+        rawVNode.KeepAlive = true;
+        // 更新当前 key 为栈中最顶端
+        keys.delete(key);
+        keys.add(key);
+      } else {
+        // 添加进缓存中
+        // TODO 应在 onMounted、onUpdated 时加入缓存
+        cache.set(rawVNode.type, rawVNode);
+        keys.add(key);
+        if (max && keys.size > parseInt(max, 10)) {
+          pruneCacheEntry(keys.values().next().value);
+        }
+      }
+      // 在组件 vnode 上添加标记，避免被渲染器将组件真的卸载
+      rawVNode.shouldKeepAlive = true;
+      // 将实例挂载到 vnode 上，以便在渲染器中访问
+      rawVNode.keepAlineInstance = instance;
+      return rawVNode;
+    };
+  }
+};
 
 
 export const simpleDiffRender = createRenderer(createSimpleDiff).render;
