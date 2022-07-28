@@ -12,7 +12,7 @@ function setCurrentInstance (instance) {
   currentInstance = instance;
 }
 
-const TYPE_ENUM = {
+export const TYPE_ENUM = {
   TEXT: Symbol('text'),
   COMMENT: Symbol('comment'),
   FRAGMENT: Symbol('fragment')
@@ -44,13 +44,8 @@ var createRender = function (options) {
 
   function patch (n1, n2, container, anchor) {
     if (n1 && n1.type !== n2.type) {
-      if (!anchor && typeof n2.type === 'object') {
-        // 当新节点为组件时 确定新组件应插入的位置
-        if (n1.el) {
-          anchor = n1.el.nextSibling;
-        } else if (typeof n1.type === 'object' && n1.component?.subTree?.el) {
-          anchor = n1.component.subTree.el.nextSibling;
-        }
+      if (!anchor) {
+        anchor = getNextHostNode(n1);
       }
       unmount(n1);
       n1 = null;
@@ -62,12 +57,30 @@ var createRender = function (options) {
       } else {
         patchElement(n1, n2);
       }
+    } else if (typeof type === 'object' && type.__isTeleport) {
+      // 组件为 Teleport 则使用该组件的 process 函数将控制权交接出去
+      // 并为 process 函数注入渲染器内的方法
+      type.process(n1, n2, container, anchor, {
+        patch,
+        patchChildren,
+        unmount,
+        move (vnode, container, anchor) {
+          insert(
+            vnode.component
+              ? vnode.component.subTree.el
+              : vnode.el,
+            container,
+            anchor
+          );
+        }
+      });
     } else if (typeof type === 'object' || typeof type === 'function') {
       // type 为 object 是有状态组件
       // type 为 function 是函数式组件
       if (!n1) {
         if (n2.keepAlive) {
           // 如果该组件已经被 keepAlive ，则不应重新挂载它，而是调用其父组件，即 KeepAlive 的 _activate 函数来激活它
+          console.log('_activate', n2, container, anchor);
           n2.keepAlineInstance._activate(n2, container, anchor);
         } else {
           mountComponent(n2, container, anchor);
@@ -173,7 +186,16 @@ var createRender = function (options) {
       }
     }
 
+    const needTransition = vnode.transition;
+    // 增加两个 transition 勾子
+    if (needTransition) {
+      vnode.transition.beforeEnter(el);
+    }
+
     insert(el, container, anchor);
+    if (needTransition) {
+      vnode.transition.enter(el);
+    }
   }
 
   function mountComponent (vnode, container, anchor) {
@@ -208,7 +230,7 @@ var createRender = function (options) {
     if (isKeepAlive) {
       instance.keepAliveCtx = {
         move: (vnode, container, anchor) => {
-          insert(vnode.component.subTree.el, container, anchor);
+          insert(vnode.el, container, anchor);
         },
         unmount,
         createElement
@@ -224,14 +246,14 @@ var createRender = function (options) {
       if (handler) {
         handler(...payload);
       } else {
-        console.log('事件不存在');
+        console.error('事件不存在');
       }
     }
 
     const setupContext = { attrs, slots, emit };
     // 在调用 setup 前设置当前组件实例
     setCurrentInstance(instance);
-    const setupResult = setup && setup(shallowReadonly(instance.props, setupContext));
+    const setupResult = setup && setup(shallowReadonly(instance.props), setupContext);
     // 重置当前组件实例
     setCurrentInstance(null);
     let setupState = null;
@@ -258,7 +280,7 @@ var createRender = function (options) {
         } else if (setupState && k in setupState) {
           return setupState[k];
         } else {
-          console.log('不存在');
+          console.error('不存在');
         }
       },
       set (t, k, v, r) {
@@ -272,7 +294,7 @@ var createRender = function (options) {
           setupState[k] = v;
           return true;
         } else {
-          console.log('不存在');
+          console.error('不存在');
         }
         return false;
       }
@@ -342,6 +364,7 @@ var createRender = function (options) {
   }
 
   function unmount (vnode) {
+    const needTransition = vnode.transition;
     if (vnode.type === TYPE_ENUM.FRAGMENT) {
       vnode.children.forEach(c => unmount(c));
       return;
@@ -357,7 +380,12 @@ var createRender = function (options) {
     }
     const parent = vnode.el.parentNode;
     if (parent) {
-      parent.removeChild(vnode.el);
+      const perFormRemove = () => parent.removeChild(vnode.el);
+      if (needTransition) {
+        vnode.transition.leave(vnode.el, performRemove);
+      } else {
+        perFormRemove();
+      }
     }
   }
 
@@ -376,13 +404,25 @@ var createRender = function (options) {
   };
 };
 
-var shouldSetAsProps = function (el, key, value) {
+function getNextHostNode (vnode) {
+  if (typeof vnode.type === 'object') {
+    // 当新节点为组件时 确定新组件应插入的位置
+    if (vnode.component) {
+      return getNextHostNode(vnode.component.subTree);
+    }
+  }
+  if (vnode.el) {
+    return vnode.el.nextSibling;
+  }
+}
+
+function shouldSetAsProps (el, key, value) {
   if (key === 'form' && el.tagName === 'INPUT') return false;
 
   return key in el;
 };
 
-var normalizeClass = function (className) {
+function normalizeClass (className) {
   if (typeof className === 'string') {
     return className;
   } else if (Array.isArray(className)) {
@@ -393,6 +433,12 @@ var normalizeClass = function (className) {
   }
   return '';
 };
+
+function nextFrame (cb) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(cb);
+  });
+}
 
 const createRenderer = createDiff => createRender({
   createDiff,
@@ -533,8 +579,7 @@ export function defineAsyncComponent (options) {
   };
 }
 
-
-const KeepAlive = {
+export const KeepAlive = {
   __isKeepAlive: true,
   props: {
     max: Number,
@@ -552,7 +597,7 @@ const KeepAlive = {
     const instance = currentInstance;
     // 对于 KeepAlive 组件来说。它的实例上存在特殊的 keepAliveCtx 对象 该对象由渲染器注入
     // 该对象会暴露渲染器内部的一些方法，其中 move 函数用来将一段 DOM 移动到另一个容器中
-    const { move, unmount, createElement } = instance.KeepAliveCtx;
+    const { move, unmount, createElement } = instance.keepAliveCtx;
 
     // 创建隐藏容器
     const storageContainer = createElement('div');
@@ -560,7 +605,11 @@ const KeepAlive = {
     // 这两个函数会在渲染器中调用
     instance._deActivate = (vnode) => {
       // 使组件失活
-      move(vnode, storageContainer);
+      if (vnode.component) {
+        instance._deActivate(vnode.component.subTree);
+      } else {
+        move(vnode, storageContainer);
+      }
     };
     instance._activate = (vnode, container, anchor) => {
       // 激活组件
@@ -570,6 +619,8 @@ const KeepAlive = {
     function pruneCacheEntry (key) {
       cache.delete(key);
       keys.delete(key);
+      // 卸载组件
+      // unmount
     }
 
     return () => {
@@ -579,7 +630,8 @@ const KeepAlive = {
       // KeepAlive 的默认插槽就是要被 KeepAlive 的组件
       let rawVNode = slots.default();
       // 如果不是组件，直接渲染即可，因为非组件的虚拟节点无法被 KeepAlive
-      if (typeof rawVNode !== 'object') {
+      if (typeof rawVNode !== 'object' || !rawVNode) {
+        current = rawVNode;
         return rawVNode;
       }
       const name = rawVNode.type.name;
@@ -588,9 +640,10 @@ const KeepAlive = {
         props.exclude && props.exclude.test(name)
       )) {
         // 如果组件的 name 无法被 include 匹配，或者被 exclude 匹配，则直接进行渲染，不做缓存
+        current = rawVNode;
         return rawVNode;
       }
-      const key = vnode.key == null ? rawVNode.type : rawVNode.key;
+      const key = rawVNode.key == null ? rawVNode.type : rawVNode.key;
       // 在挂载是先获取缓存的组件 vnode
       const cachedVNode = cache.get(key);
       if (cachedVNode) {
@@ -606,7 +659,7 @@ const KeepAlive = {
         // TODO 应在 onMounted、onUpdated 时加入缓存
         cache.set(rawVNode.type, rawVNode);
         keys.add(key);
-        if (max && keys.size > parseInt(max, 10)) {
+        if (props.max && keys.size > parseInt(props.max, 10)) {
           pruneCacheEntry(keys.values().next().value);
         }
       }
@@ -614,7 +667,82 @@ const KeepAlive = {
       rawVNode.shouldKeepAlive = true;
       // 将实例挂载到 vnode 上，以便在渲染器中访问
       rawVNode.keepAlineInstance = instance;
+      current = rawVNode;
       return rawVNode;
+    };
+  }
+};
+
+export const Teleport = {
+  __isTeleport: true,
+  props: {
+    to: null
+  },
+  process (n1, n2, container, anchor, internals) {
+    const { move, patch, patchChildren } = internals;
+    if (!n1) {
+      // 挂载节点来自 Teleport 组件的 props.to
+      const target = typeof n2.props.to === 'string'
+        ? document.querySelector(n2.props.to)
+        : n2.props.to;
+      n2.children.forEach(c => patch(null, c, target, anchor));
+    } else {
+      patchChildren(n1, n2, container);
+      if (n2.props.to !== n1.props.to) {
+        const newTarget = typeof n2.props.to === 'string'
+          ? document.querySelector(n2.props.to)
+          : n2.props.to;
+        n2.children.forEach(c => move(c, newTarget));
+        // 这里只考虑了移动组件和普通元素，Text、Fragment等虚拟节点还未完善
+      }
+    }
+  }
+};
+
+export const Transition = {
+  name: 'Transition',
+  props: {
+    // 集中挂载状态的className
+  },
+  setup (props, { slots }) {
+    return () => {
+      const innerVNode = slots.default();
+
+      innerVNode.transition = {
+        beforeEnter (el) {
+          // 设置初始状态
+          el.classList.add('enter-from');
+          el.classList.add('enter-active');
+        },
+        enter (el) {
+          nextFrame(() => {
+            el.classList.remove('enter-from');
+            el.classList.add('enter-to');
+            // 监听 transitionend 事件完成收尾工作
+            el.addEventListener('transitionend', () => {
+              el.classList.remove('enter-to');
+              el.classList.remove('enter-active');
+            });
+          });
+        },
+        leave (el, performRemove) {
+          el.classList.add('enter-from');
+          el.classList.add('enter-active');
+          // 强制 reflow，使得初始状态生效
+          document.body.offsetHeight;
+          nextFrame(() => {
+            el.classList.remove('enter-from');
+            el.classList.add('enter-to');
+            el.addEventListener('transitionend', () => {
+              el.classList.remove('enter-to');
+              el.classList.remove('enter-active');
+              performRemove();
+            });
+          });
+        }
+      };
+
+      return innerVNode;
     };
   }
 };

@@ -1,5 +1,6 @@
-import { render, onMounted, defineAsyncComponent } from "./index.js";
+import { render, onMounted, Teleport, KeepAlive, Transition, defineAsyncComponent, TYPE_ENUM } from "./index.js";
 import { ref, toRefs, effect, watch, computed, reactive, shallowReactive } from "./reactivity/index.js";
+import { compiler } from "./compiler/index.js";
 
 const oldNode = {
   type: 'div',
@@ -195,7 +196,7 @@ const test_3 = () => {
   }, 1000);
 };
 
-const test = () => {
+const test_4 = () => {
   const Comp1 = {
     name: 'Comp1',
     props: {
@@ -240,30 +241,36 @@ const test = () => {
       };
     }
   };
-
+  let loaded = false;
   const Comp2 = defineAsyncComponent({
     delay: 3000,
     loader: () => new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          setup () {
-            onMounted(() => {
-              console.log('Comp2 onMounted');
-            });
-            return () => {
-              return { key: 0, type: 'div', children: 'this is Comp2' };
-            };
-          }
-        });
-      }, 5000);
+      const res = {
+        setup () {
+          onMounted(() => {
+            console.log('Comp2 onMounted');
+          });
+          return () => {
+            return { key: 0, type: 'div', children: 'this is Comp2' };
+          };
+        }
+      };
+      if (!loaded) {
+        setTimeout(() => {
+          resolve(res);
+          loaded = true;
+        }, 5000);
+      } else {
+        resolve(res);
+      }
     }),
     loadingComponent: {
-      render () {
-        return {
+      setup () {
+        return () => ({
           key: 0,
           type: 'div',
           children: 'loading'
-        };
+        });
       }
     }
   });
@@ -282,7 +289,7 @@ const test = () => {
     render () {
       return {
         type: 'div',
-        props: { onClick: this.clickHandler },
+        props: { style: 'cursor: pointer;', onClick: this.clickHandler },
         children: `this is Comp3, count is: ${this.count}`
       };
     }
@@ -302,7 +309,8 @@ const test = () => {
     data () {
       return {
         msg: 'Hello World',
-        text: 'show text'
+        text: 'show text',
+        Comp2Visible: true
       };
     },
     render () {
@@ -316,6 +324,8 @@ const test = () => {
             props: {
               onClick: () => {
                 this.msg = Date.now();
+                this.text = 'Hello World' + this.msg;
+                this.Comp2Visible = !this.Comp2Visible;
               }
             },
             children: 'button'
@@ -329,18 +339,43 @@ const test = () => {
           },
           {
             key: 2,
-            type: Comp2,
+            type: KeepAlive,
+            children: {
+              default: () => {
+                return this.Comp2Visible
+                  ? { key: 0, type: Comp2 }
+                  : { key: 0, type: TYPE_ENUM.COMMENT, children: '' };
+              }
+            }
           },
           {
             key: 3,
-            type: Comp3,
+            type: Transition,
+            children: {
+              default: () => ({
+                key: 0,
+                type: 'div',
+                children: [
+                  { key: 0, type: Comp3 }
+                ]
+              })
+            }
           },
           {
             key: 4,
-            type: Comp4,
+            type: Teleport,
             props: {
-              text: this.text
-            }
+              to: 'body'
+            },
+            children: [
+              {
+                key: 0,
+                type: Comp4,
+                props: {
+                  text: this.text
+                }
+              }
+            ]
           }
         ]
       };
@@ -348,6 +383,10 @@ const test = () => {
   };
 
   render({ type: vnode }, document.querySelector('#app'));
+};
+
+const test = () => {
+  console.log(compiler(`<div><p>Vue</p><p>Template</p></div>`));
 };
 
 export default test;

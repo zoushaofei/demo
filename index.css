@@ -136,3 +136,16 @@
 li {
   background-color: red;
 }
+
+/* 起始状态 */
+.enter-from {
+  transform: translateX(-200px);
+}
+/* 结束状态 */
+.enter-to {
+  transform: translateX(0);
+}
+/* 过度状态 */
+.enter-active {
+  transition: transform 1s ease-out;
+}
