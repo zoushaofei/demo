@@ -1,6 +1,7 @@
 import { render, onMounted, Teleport, KeepAlive, Transition, defineAsyncComponent, TYPE_ENUM } from "./index.js";
 import { ref, toRefs, effect, watch, computed, reactive, shallowReactive } from "./reactivity/index.js";
 import { compiler } from "./compiler/index.js";
+import { newParse } from "./compiler/parse.js";
 
 const oldNode = {
   type: 'div',
@@ -387,6 +388,14 @@ const test_4 = () => {
 
 const test = () => {
   console.log(compiler(`<div><p>Vue</p><p>Template</p></div>`));
+  console.log(newParse(
+    `<div :id="foo" @click="handler" v-show="display" >
+  {{ display }}
+  <!-- comment -->
+  <p>&lt text1 &gt;</p>
+  <p>text2</p>
+</div>`
+  ));
 };
 
 export default test;
